@@ -3,115 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>AR Примерка Картины v3.0</title>
+    <title>AR Примерка - Фикс WebXR</title>
     
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 
     <style>
         :root {
-            --apple-blue: #0071e3;
-            --bg-light: #f5f5f7;
-            --text-dark: #1d1d1f;
+            --primary: #0071e3;
+            --bg: #000;
+            --surface: #ffffff;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
-
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg); }
         .app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
 
-        /* Зона просмотра */
         .viewport-container { flex: 1; position: relative; background: #e5e5ea; }
         model-viewer { width: 100%; height: 100%; display: block; }
 
-        /* Лоадер */
-        .loader {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: var(--bg-light); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; gap: 12px; z-index: 20;
-            transition: opacity 0.4s ease;
-        }
-        .loader.hidden { opacity: 0; pointer-events: none; }
-        .spinner { width: 32px; height: 32px; border: 3px solid #d2d2d7; border-top-color: var(--apple-blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Предупреждение о неподдерживаемом браузере (как на видео) */
-        .browser-warning {
-            position: absolute; top: 12px; left: 12px; right: 12px;
-            background: rgba(255, 59, 48, 0.95); color: white; padding: 12px;
-            border-radius: 12px; font-size: 13px; text-align: center;
-            z-index: 30; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-
-        /* --- НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ (ВНЕ AR) --- */
+        /* Панель настроек (ВНЕ AR) */
         .bottom-ui {
-            background: #ffffff;
-            padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
-            border-radius: 24px 24px 0 0;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.05);
-            z-index: 10;
+            background: var(--surface); padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+            border-radius: 24px 24px 0 0; z-index: 10;
         }
-
         .inputs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-        
         .input-box {
-            background: var(--bg-light); border: 1px solid #e5e5ea;
-            border-radius: 12px; padding: 12px; display: flex;
-            align-items: center; justify-content: space-between;
+            background: #f5f5f7; border-radius: 12px; padding: 12px;
+            display: flex; align-items: center; justify-content: space-between;
         }
-        .input-box label { font-size: 13px; color: #86868b; font-weight: 500; }
-        .input-box input {
-            width: 60px; border: none; background: transparent;
-            text-align: right; font-size: 16px; font-weight: 600;
-            color: var(--text-dark); outline: none;
-        }
+        .input-box label { font-size: 13px; color: #86868b; }
+        .input-box input { width: 60px; border: none; background: transparent; text-align: right; font-size: 16px; font-weight: 600; outline: none; }
+        
+        .btn { width: 100%; padding: 16px; border-radius: 14px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-secondary { background: #fff; color: #1d1d1f; border: 1px solid #d2d2d7; }
 
-        .btn {
-            width: 100%; padding: 16px; border-radius: 14px; border: none;
-            font-size: 16px; font-weight: 600; cursor: pointer;
-            display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s;
-        }
-        .btn-primary { background: var(--apple-blue); color: #fff; margin-bottom: 10px; }
-        .btn-secondary { background: #ffffff; color: var(--text-dark); border: 1px solid #d2d2d7; }
-
-        /* --- ИНТЕРФЕЙС В РЕЖИМЕ КАМЕРЫ (AR) --- */
+        /* ИНТЕРФЕЙС В РЕЖИМЕ КАМЕРЫ (AR) */
         .ar-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; display: flex; flex-direction: column;
             justify-content: space-between; padding: env(safe-area-inset-top) 20px calc(15px + env(safe-area-inset-bottom)) 20px;
         }
-
-        .ar-status-toast {
-            align-self: center; margin-top: 15px;
-            background: rgba(0, 0, 0, 0.75); color: #fff;
-            padding: 10px 20px; border-radius: 20px; font-size: 14px;
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        }
-
+        .ar-status-toast { align-self: center; margin-top: 15px; background: rgba(0, 0, 0, 0.75); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; backdrop-filter: blur(10px); }
         .ar-action-bar { display: flex; gap: 10px; pointer-events: auto; }
-        
-        .ar-btn {
-            flex: 1; padding: 16px; border-radius: 14px; border: none;
-            font-size: 14px; font-weight: 600; color: var(--text-dark);
-            background: rgba(255, 255, 255, 0.9); box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        }
-        .ar-btn.confirm { background: var(--apple-blue); color: #fff; }
+        .ar-btn { flex: 1; padding: 16px; border-radius: 14px; border: none; font-size: 14px; font-weight: 600; color: #1d1d1f; background: rgba(255, 255, 255, 0.9); }
+        .ar-btn.confirm { background: var(--primary); color: #fff; }
         .ar-btn.close { background: #ff3b30; color: #fff; flex: 0 0 60px; }
+
+        .error-toast { position: absolute; top: 20px; left: 20px; right: 20px; background: #ff3b30; color: white; padding: 16px; border-radius: 12px; font-size: 14px; text-align: center; display: none; z-index: 50; }
     </style>
 </head>
 <body>
-
     <div class="app">
         <div class="viewport-container">
-            <div class="loader" id="main-loader">
-                <div class="spinner"></div>
-                <p style="color: #86868b; font-size: 14px;">Калибровка под ваши размеры...</p>
-            </div>
-
-            <div class="browser-warning" id="chrome-warning">
-                ⚠️ Интерфейс AR заблокирован браузером. Скопируйте ссылку и откройте её прямо в <b>Google Chrome</b>!
-            </div>
+            <div class="error-toast" id="error-msg">Твой браузер не поддерживает WebXR. Открой ссылку в Google Chrome.</div>
 
             <model-viewer 
                 id="art-engine" 
@@ -121,12 +66,10 @@
                 ar-scale="fixed" 
                 ar-placement="wall"
                 camera-controls 
-                disable-zoom 
-                shadow-intensity="1.5">
+                disable-zoom>
                 
                 <div slot="ar-ui" class="ar-overlay">
                     <div class="ar-status-toast" id="ar-toast">Наведите на стену</div>
-                    
                     <div class="ar-action-bar">
                         <button class="ar-btn" id="ar-relocate">Новая стена</button>
                         <button class="ar-btn confirm" id="ar-freeze">Закрепить</button>
@@ -138,128 +81,89 @@
 
         <div class="bottom-ui">
             <div class="inputs-row">
-                <div class="input-box">
-                    <label>Ширина</label>
-                    <div><input type="number" id="width-cm" value="60"> <span style="font-size:13px;color:#86868b">см</span></div>
-                </div>
-                <div class="input-group input-box">
-                    <label>Высота</label>
-                    <div><input type="number" id="height-cm" value="80"> <span style="font-size:13px;color:#86868b">см</span></div>
-                </div>
+                <div class="input-box"><label>Ширина</label><div><input type="number" id="w-in" value="60"> см</div></div>
+                <div class="input-box"><label>Высота</label><div><input type="number" id="h-in" value="80"> см</div></div>
             </div>
-
-            <input type="file" id="file-loader" accept="image/*" style="display: none;">
-            <button class="btn btn-primary" id="launch-ar">Примерить на стену (AR)</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('file-loader').click()">Загрузить свою картину</button>
+            <input type="file" id="file-in" accept="image/*" style="display: none;">
+            <button class="btn btn-primary" id="start-ar">Примерить на стену (AR)</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('file-in').click()">Своя картина</button>
         </div>
     </div>
 
     <script>
         const viewer = document.getElementById('art-engine');
-        const loader = document.getElementById('main-loader');
-        const wIn = document.getElementById('width-cm');
-        const hIn = document.getElementById('height-cm');
+        const wIn = document.getElementById('w-in');
+        const hIn = document.getElementById('h-in');
         const toast = document.getElementById('ar-toast');
-        const warning = document.getElementById('chrome-warning');
-
-        let originalModelSize = null;
-        let proportions = 60 / 80; 
         let locked = false;
 
-        // Корректный расчет масштаба на базе РЕАЛЬНЫХ размеров 3D файла
-        function rescaleModel() {
-            if (!originalModelSize) return;
-            
-            const targetWidthMeters = (parseFloat(wIn.value) || 60) / 100;
-            const targetHeightMeters = (parseFloat(hIn.value) || 80) / 100;
-
-            // Вычисляем точный множитель относительно дефолтного размера сетки модели
-            const finalScaleX = targetWidthMeters / originalModelSize.x;
-            const finalScaleY = targetHeightMeters / originalModelSize.y;
-
-            viewer.setAttribute('scale', `${finalScaleX} ${finalScaleY} 1`);
+        // Прямое и тупое масштабирование (1 метр = 1)
+        function applyScale() {
+            const w = (parseFloat(wIn.value) || 60) / 100;
+            const h = (parseFloat(hIn.value) || 80) / 100;
+            viewer.setAttribute('scale', `${w} ${h} 1`);
         }
 
-        viewer.addEventListener('load', () => {
-            // Сканируем реальные габариты загруженной модели при старте
-            originalModelSize = viewer.getDimensions();
-            loader.classList.add('hidden');
-            rescaleModel();
-        });
+        wIn.addEventListener('input', applyScale);
+        hIn.addEventListener('input', applyScale);
+        viewer.addEventListener('load', applyScale);
 
-        // Автоматическое удержание пропорций при вводе цифр
-        wIn.addEventListener('input', () => {
-            hIn.value = Math.round(wIn.value / proportions);
-            rescaleModel();
-        });
-        hIn.addEventListener('input', () => {
-            wIn.value = Math.round(hIn.value * proportions);
-            rescaleModel();
-        });
-
-        // Загрузка файла пользователя с перерасчетом сетки пропорций
-        document.getElementById('file-loader').addEventListener('change', (e) => {
+        // Загрузка своей картинки
+        document.getElementById('file-in').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
-            const blob = URL.createObjectURL(file);
-            const userImg = new Image();
-            userImg.src = blob;
+            const url = URL.createObjectURL(file);
             
-            userImg.onload = async () => {
-                proportions = userImg.width / userImg.height;
-                hIn.value = Math.round(wIn.value / proportions);
-                rescaleModel();
+            const img = new Image();
+            img.src = url;
+            img.onload = async () => {
+                const aspect = img.width / img.height;
+                hIn.value = Math.round(wIn.value / aspect);
+                applyScale();
 
                 try {
-                    const newTexture = await viewer.createTexture(blob);
+                    const texture = await viewer.createTexture(url);
                     if (viewer.model?.materials[0]?.pbrMetallicRoughness?.baseColorTexture) {
-                        viewer.model.materials[0].pbrMetallicRoughness.baseColorTexture.setTexture(newTexture);
+                        viewer.model.materials[0].pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     }
-                } catch (err) { alert("Не удалось обработать изображение"); }
+                } catch(err) {}
             };
         });
 
-        // Проверка поддержки полноценного WebXR до запуска
-        document.getElementById('launch-ar').addEventListener('click', () => {
+        // Запуск AR
+        document.getElementById('start-ar').addEventListener('click', () => {
             if (!viewer.canActivateAR) {
-                warning.style.display = 'block';
-                window.scrollTo({top: 0, behavior: 'smooth'});
+                document.getElementById('error-msg').style.display = 'block';
                 return;
             }
-            rescaleModel();
+            applyScale();
             viewer.activateAR();
         });
 
-        // Логика работы кнопок внутри режима камеры
+        // AR Кнопки
         document.getElementById('ar-freeze').addEventListener('click', (e) => {
             e.stopPropagation();
             locked = !locked;
-            const shield = viewer.querySelector('[slot="ar-ui"]');
             if(locked) {
                 document.getElementById('ar-freeze').innerText = "Разблокировать";
                 document.getElementById('ar-freeze').style.background = "#86868b";
-                toast.innerText = "Положение закреплено";
+                toast.innerText = "Закреплено";
             } else {
                 document.getElementById('ar-freeze').innerText = "Закрепить";
-                document.getElementById('ar-freeze').style.background = "var(--apple-blue)";
-                toast.innerText = "Перемещайте картину пальцем";
+                document.getElementById('ar-freeze').style.background = "var(--primary)";
+                toast.innerText = "Можно двигать";
             }
         });
 
-        // Отлипание и мгновенный перенос на другую стену
         document.getElementById('ar-relocate').addEventListener('click', (e) => {
             e.stopPropagation();
             if(locked) document.getElementById('ar-freeze').click();
-            toast.innerText = "Ищем новую вертикальную плоскость...";
-            
+            toast.innerText = "Наведите на новую стену";
             viewer.removeAttribute('ar-placement');
-            setTimeout(() => { viewer.setAttribute('ar-placement', 'wall'); }, 60);
+            setTimeout(() => viewer.setAttribute('ar-placement', 'wall'), 50);
         });
 
-        document.getElementById('ar-quit').addEventListener('click', () => {
-            window.location.reload();
-        });
+        document.getElementById('ar-quit').addEventListener('click', () => window.location.reload());
     </script>
 </body>
 </html>
