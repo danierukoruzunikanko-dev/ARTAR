@@ -1,268 +1,106 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>AR Примерка Картины v4.0</title>
-    
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+viewer.addEventListener('ar-status', (event) => {
+      const status = event.detail?.status;
+      if (status === 'session-started') {
+        updateTrackingMessage('active');
+      } else if (status === 'object-placed' || status === 'tracking') {
+        updateTrackingMessage('tracking');
+      } else if (status === 'failed') {
+        updateTrackingMessage('error');
+      } else if (status === 'not-presenting') {
+        updateTrackingMessage('tracking');
+      }
+    });
 
-    <style>
-        :root {
-            --primary: #0071e3;
-            --bg-light: #f5f5f7;
-            --text-dark: #1d1d1f;
-        }
+    viewer.addEventListener('ar-tracking', (event) => {
+      const status = event.detail?.status;
+      if (status === 'tracking') updateTrackingMessage('tracking');
+      else if (status === 'not-tracking') updateTrackingMessage('paused');
+    });
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #fff; }
-        
-        .app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
-        .viewport-container { flex: 1; position: relative; background: #e5e5ea; }
-        model-viewer { width: 100%; height: 100%; display: block; }
+    viewer.addEventListener('error', () => {
+      modelStatus.textContent = 'Ошибка загрузки модели';
+      setLoader(false, 'Не удалось загрузить 3D-модель. Проверь ссылку и CORS-настройки.');
+    });
 
-        /* Экран загрузки */
-        .loader {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: #ffffff; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; gap: 12px; z-index: 20;
-            transition: opacity 0.3s ease;
-        }
-        .loader.hidden { opacity: 0; pointer-events: none; }
-        .spinner { width: 36px; height: 36px; border: 3px solid #d2d2d7; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+    widthInput.addEventListener('input', syncHeightFromWidth);
+    heightInput.addEventListener('input', syncWidthFromHeight);
 
-        /* Информационная плашка про браузеры */
-        .browser-info {
-            position: absolute; top: 12px; left: 12px; right: 12px;
-            background: rgba(255, 255, 255, 0.95); color: var(--text-dark); padding: 12px;
-            border-radius: 14px; font-size: 12px; line-height: 1.4;
-            z-index: 30; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-            border-left: 4px solid var(--primary);
-        }
+    pickFileBtn.addEventListener('click', () => fileLoader.click());
+    fileLoader.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      await resizeAndTextureFromFile(file);
+    });
 
-        /* --- НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ --- */
-        .bottom-ui {
-            background: #ffffff;
-            padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
-            border-radius: 24px 24px 0 0;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.05);
-            z-index: 10;
-        }
+    launchAR.addEventListener('click', async () => {
+      updateSizeUI();
+      applyScale();
+      if (!viewer.canActivateAR) {
+        updateTrackingMessage('error');
+      }
+      try {
+        await viewer.activateAR();
+      } catch (err) {
+        console.warn('AR не удалось запустить:', err);
+        updateTrackingMessage('error');
+      }
+    });
 
-        .inputs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-        .input-box {
-            background: var(--bg-light); border: 1px solid #e5e5ea;
-            border-radius: 12px; padding: 12px; display: flex;
-            align-items: center; justify-content: space-between;
-        }
-        .input-box label { font-size: 13px; color: #86868b; font-weight: 500; }
-        .input-box input {
-            width: 70px; border: none; background: transparent;
-            text-align: right; font-size: 16px; font-weight: 600;
-            color: var(--text-dark); outline: none;
-        }
+    arButton.addEventListener('click', async () => {
+      updateSizeUI();
+      applyScale();
+    });
 
-        .btn {
-            width: 100%; padding: 16px; border-radius: 14px; border: none;
-            font-size: 16px; font-weight: 600; cursor: pointer;
-            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-            transition: background 0.2s;
-        }
-        .btn-primary { background: var(--primary); color: #fff; margin-bottom: 10px; }
-        .btn-secondary { background: var(--bg-light); color: var(--text-dark); margin-bottom: 10px; }
-        .btn-link { background: transparent; color: var(--primary); font-size: 14px; padding: 5px; border: none; cursor: pointer; }
+    relocateBtn.addEventListener('click', async () => {
+      if (state.locked) toggleLock(false);
+      updateTrackingMessage('tracking');
+      if (typeof viewer.resetTurntableRotation === 'function') {
+        viewer.resetTurntableRotation(0);
+      }
+      if (typeof viewer.updateFraming === 'function') {
+        viewer.updateFraming();
+      }
+    });
 
-        /* --- ИНТЕРФЕЙС В РЕЖИМЕ КАМЕРЫ (Для полноценного WebXR в Chrome) --- */
-        .ar-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column;
-            justify-content: space-between; padding: env(safe-area-inset-top) 20px calc(15px + env(safe-area-inset-bottom)) 20px;
-        }
-        .ar-status-toast {
-            align-self: center; margin-top: 15px;
-            background: rgba(0, 0, 0, 0.8); color: #fff;
-            padding: 10px 20px; border-radius: 20px; font-size: 14px;
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        }
-        .ar-action-bar { display: flex; gap: 10px; pointer-events: auto; }
-        .ar-btn {
-            flex: 1; padding: 16px; border-radius: 14px; border: none;
-            font-size: 14px; font-weight: 600; color: var(--text-dark);
-            background: rgba(255, 255, 255, 0.9); box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-        }
-        .ar-btn.confirm { background: var(--primary); color: #fff; }
-        .ar-btn.close { background: #ff3b30; color: #fff; flex: 0 0 60px; }
-    </style>
-</head>
-<body>
+    freezeBtn.addEventListener('click', () => toggleLock());
 
-    <div class="app">
-        <div class="viewport-container">
-            <div class="loader" id="main-loader">
-                <div class="spinner"></div>
-                <p style="color: #86868b; font-size: 14px; font-weight: 500;">Загрузка 3D сцены...</p>
-            </div>
+    quitBtn.addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      window.location.reload();
+    });
 
-            <div class="browser-info">
-                💡 <b>Для работы кнопок на стене:</b> Открывайте сайт строго в приложении <b>Google Chrome</b>. Внутри встроенных браузеров мессенджеров система блокирует интерфейс примерки.
-            </div>
+    copyLinkBtn.addEventListener('click', async () => {
+      const url = window.location.href;
+      try {
+        await navigator.clipboard.writeText(url);
+        copyLinkBtn.textContent = 'Ссылка скопирована';
+        setTimeout(() => copyLinkBtn.textContent = 'Скопировать ссылку', 1400);
+      } catch {
+        prompt('Скопируй ссылку вручную:', url);
+      }
+    });
 
-            <model-viewer 
-                id="art-engine" 
-                src="https://cdn.jsdelivr.net/gh/danierukoruzunikanko-dev/3d-models@main/uploads_files_4943730_lisa.glb" 
-                ar 
-                ar-modes="webxr scene-viewer" 
-                ar-scale="fixed" 
-                ar-placement="wall"
-                camera-controls 
-                disable-zoom
-                shadow-intensity="1.2">
-                
-                <div slot="ar-ui" class="ar-overlay">
-                    <div class="ar-status-toast" id="ar-toast">Наведите камеру на стену</div>
-                    <div class="ar-action-bar">
-                        <button class="ar-btn" id="ar-relocate">Сбросить стену</button>
-                        <button class="ar-btn confirm" id="ar-freeze">Закрепить</button>
-                        <button class="ar-btn close" id="ar-quit">✕</button>
-                    </div>
-                </div>
-            </model-viewer>
-        </div>
+    resetBtn.addEventListener('click', () => {
+      if (state.sourceImageURL && state.sourceImageURL.startsWith('blob:')) {
+        try { URL.revokeObjectURL(state.sourceImageURL); } catch (_) {}
+      }
+      state.sourceImageURL = null;
+      state.sourceFileName = '';
+      fileName.textContent = 'Файл не выбран';
+      resetDefaults();
+    });
 
-        <div class="bottom-ui">
-            <div class="inputs-row">
-                <div class="input-box">
-                    <label>Ширина</label>
-                    <div><input type="number" id="width-cm" value="60"> <b>см</b></div>
-                </div>
-                <div class="input-box">
-                    <label>Высота</label>
-                    <div><input type="number" id="height-cm" value="80"> <b>см</b></div>
-                </div>
-            </div>
+    window.addEventListener('beforeunload', () => {
+      if (state.sourceImageURL && state.sourceImageURL.startsWith('blob:')) {
+        try { URL.revokeObjectURL(state.sourceImageURL); } catch (_) {}
+      }
+    });
 
-            <input type="file" id="file-loader" accept="image/*" style="display: none;">
-            
-            <button class="btn btn-primary" id="launch-ar">Примерить на стену (AR)</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('file-loader').click()">Загрузить свою картину</button>
-            
-            <center>
-                <button class="btn btn-link" id="copy-link-btn">🔗 Скопировать ссылку для открытия в Chrome</button>
-            </center>
-        </div>
-    </div>
-
-    <script>
-        const viewer = document.getElementById('art-engine');
-        const loader = document.getElementById('main-loader');
-        const wIn = document.getElementById('width-cm');
-        const hIn = document.getElementById('height-cm');
-        const toast = document.getElementById('ar-toast');
-        
-        let initialDimensions = null;
-        let aspect = 60 / 80;
-        let locked = false;
-
-        // ТОЧНАЯ КАЛИБРОВКА МАСШТАБА ОТ КОРНЯ МОДЕЛИ
-        function rescale() {
-            if (!initialDimensions) return;
-
-            const targetWidthMeters = (parseFloat(wIn.value) || 60) / 100;
-            const targetHeightMeters = (parseFloat(hIn.value) || 80) / 100;
-
-            // Вычисляем дельту масштабирования относительно "чистого" файла без накопления ошибок
-            const scaleX = targetWidthMeters / initialDimensions.x;
-            const scaleY = targetHeightMeters / initialDimensions.y;
-
-            viewer.setAttribute('scale', `${scaleX} ${scaleY} 1`);
-            
-            // Корректируем фокус камеры в превью, чтобы объект не улетал
-            if (typeof viewer.updateFraming === 'function') {
-                viewer.updateFraming();
-            }
-        }
-
-        viewer.addEventListener('load', () => {
-            // Временный сброс для замера нативных габаритов сетки
-            viewer.removeAttribute('scale');
-            
-            setTimeout(() => {
-                initialDimensions = viewer.getDimensions();
-                loader.classList.add('hidden');
-                rescale();
-            }, 150);
-        });
-
-        // Удержание пропорций
-        wIn.addEventListener('input', () => {
-            hIn.value = Math.round(wIn.value / aspect);
-            rescale();
-        });
-        hIn.addEventListener('input', () => {
-            wIn.value = Math.round(hIn.value * aspect);
-            rescale();
-        });
-
-        // Замена текстуры на изображение пользователя
-        document.getElementById('file-loader').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const blob = URL.createObjectURL(file);
-            const img = new Image();
-            img.src = blob;
-
-            img.onload = async () => {
-                aspect = img.width / img.height;
-                hIn.value = Math.round(wIn.value / aspect);
-                rescale();
-
-                try {
-                    const texture = await viewer.createTexture(blob);
-                    if (viewer.model?.materials[0]?.pbrMetallicRoughness?.baseColorTexture) {
-                        viewer.model.materials[0].pbrMetallicRoughness.baseColorTexture.setTexture(texture);
-                    }
-                } catch (err) { console.error("Ошибка обновления текстуры", err); }
-            };
-        });
-
-        // Запуск сессии
-        document.getElementById('launch-ar').addEventListener('click', () => {
-            rescale();
-            viewer.activateAR();
-        });
-
-        // Копирование в буфер для открытия в Chrome
-        document.getElementById('copy-link-btn').addEventListener('click', () => {
-            navigator.clipboard.writeText(window.location.href);
-            alert("Ссылка скопирована! Запустите приложение Google Chrome на смартфоне и вставьте ссылку в адресную строку.");
-        });
-
-        // Логика работы кнопок (активна только в Chrome WebXR)
-        document.getElementById('ar-freeze').addEventListener('click', (e) => {
-            e.stopPropagation();
-            locked = !locked;
-            if(locked) {
-                document.getElementById('ar-freeze').innerText = "Разблокировать";
-                toast.innerText = "Положение закреплено";
-            } else {
-                document.getElementById('ar-freeze').innerText = "Закрепить";
-                toast.innerText = "Можно двигать пальцем";
-            }
-        });
-
-        document.getElementById('ar-relocate').addEventListener('click', (e) => {
-            e.stopPropagation();
-            if(locked) document.getElementById('ar-freeze').click();
-            toast.innerText = "Наведите на новую стену...";
-            viewer.removeAttribute('ar-placement');
-            setTimeout(() => { viewer.setAttribute('ar-placement', 'wall'); }, 100);
-        });
-
-        document.getElementById('ar-quit').addEventListener('click', () => {
-            window.location.reload();
-        });
-    </script>
+    updateSizeUI();
+    resetDefaults();
+    updateArAvailability();
+    setLoader(true, 'Загружаю 3D-сцену…');
+  </script>
 </body>
 </html>
