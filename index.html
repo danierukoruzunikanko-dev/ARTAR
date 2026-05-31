@@ -2,394 +2,256 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AR Виртуальная Примерка Картины</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AR Примерка Картины PRO</title>
     
     <script src="https://unpkg.com/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
     <script>var polyfill = new WebXRPolyfill();</script>
-
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            -webkit-font-smoothing: antialiased;
+        :root {
+            --primary: #0071e3;
+            --surface: rgba(255, 255, 255, 0.85);
+            --text: #1d1d1f;
         }
 
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #f5f5f7;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            width: 100vw; height: 100vh;
+            overflow: hidden; background: #000;
         }
 
-        .app-container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            width: 100vw;
-        }
-
-        .app-header {
-            background: #ffffff;
-            padding: 16px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 16px;
-            border-bottom: 1px solid #e5e5ea;
-            color: #1d1d1f;
-            letter-spacing: -0.2px;
-        }
-
-        .preview-zone {
-            flex: 1;
-            position: relative;
-            background: #e5e5ea;
-        }
-
+        /* Основной контейнер 3D */
         model-viewer {
-            width: 100%;
-            height: 100%;
-            display: block;
+            width: 100%; height: 100%;
+            display: block; background: #e5e5ea;
         }
 
-        /* Анимированный экран загрузки */
-        .loading-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: #f5f5f7;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 16px;
-            font-weight: 500;
-            color: #86868b;
-            transition: opacity 0.4s ease;
+        /* --- UI ПОВЕРХ 3D (ВНЕ AR) --- */
+        .web-ui {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: #fff;
+            padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+            border-radius: 24px 24px 0 0;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 10;
         }
-        
-        .loading-overlay.hidden {
-            opacity: 0;
-            pointer-events: none;
+
+        .web-ui.hidden { transform: translateY(100%); }
+
+        .controls-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;
         }
 
-        .spinner {
-            width: 36px;
-            height: 36px;
-            border: 3px solid #d2d2d7;
-            border-top-color: #0071e3;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+        .input-group {
+            background: #f5f5f7; border-radius: 12px; padding: 10px 14px;
+            display: flex; align-items: center; justify-content: space-between;
         }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Нижняя панель управления параметрами */
-        .bottom-panel {
-            background: #ffffff;
-            padding: 20px 20px 32px 20px;
-            border-top: 1px solid #e5e5ea;
-            box-shadow: 0 -4px 16px rgba(0,0,0,0.04);
+        .input-group label { font-size: 13px; color: #86868b; }
+        .input-group input {
+            width: 50px; background: transparent; border: none; text-align: right;
+            font-size: 16px; font-weight: 600; outline: none;
         }
 
-        .size-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 20px;
+        .btn-main {
+            width: 100%; padding: 16px; border-radius: 14px; border: none;
+            background: var(--primary); color: #fff; font-size: 16px; font-weight: 600;
+            cursor: pointer; margin-bottom: 10px;
+        }
+        .btn-sec {
+            width: 100%; padding: 14px; border-radius: 14px; border: 1px solid #d2d2d7;
+            background: #fff; color: var(--text); font-size: 15px; font-weight: 500;
         }
 
-        .input-field {
-            display: flex;
-            align-items: center;
-            background: #f5f5f7;
-            border: 1px solid #e5e5ea;
-            border-radius: 12px;
-            padding: 12px 14px;
-            transition: border-color 0.2s;
-        }
-
-        .input-field:focus-within {
-            border-color: #0071e3;
-        }
-
-        .input-field .prefix {
-            font-size: 13px;
-            color: #86868b;
-            margin-right: 6px;
-        }
-
-        .input-field input {
-            flex: 1;
-            border: none;
-            background: transparent;
-            font-size: 16px;
-            font-weight: 600;
-            color: #1d1d1f;
-            width: 100%;
-            outline: none;
-            text-align: right;
-        }
-
-        .input-field .suffix {
-            font-size: 13px;
-            color: #1d1d1f;
-            font-weight: 500;
-            margin-left: 4px;
-        }
-
-        .buttons-row {
-            display: grid;
-            grid-template-columns: 1fr 1.4fr;
-            gap: 12px;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 16px;
-            border-radius: 14px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            transition: background-color 0.2s, transform 0.1s;
-        }
-
-        .btn:active { transform: scale(0.98); }
-        
-        .btn-outline {
-            background: #ffffff;
-            color: #1d1d1f;
-            border: 1px solid #d2d2d7;
-        }
-        .btn-outline:hover { background-color: #f5f5f7; }
-
-        .btn-filled {
-            background: #0071e3;
-            color: #ffffff;
-        }
-        .btn-filled:hover { background-color: #0077ed; }
-
-        /* --- Стили интерфейса поверх AR камеры --- */
+        /* --- UI ВНУТРИ AR (Режим камеры) --- */
         #ar-ui-container {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 24px;
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
         }
 
-        .ar-top-bar { display: flex; justify-content: center; }
-        
-        .ar-prompt {
-            background: rgba(0, 0, 0, 0.75);
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 24px;
-            font-size: 14px;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        .ar-toast {
+            align-self: center; margin-top: 20px;
+            background: rgba(0,0,0,0.7); color: #fff;
+            padding: 12px 24px; border-radius: 30px; font-size: 14px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            transition: opacity 0.3s;
         }
 
-        .ar-bottom-bar {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            pointer-events: auto;
+        .ar-controls {
+            display: flex; gap: 10px; margin-bottom: 20px;
+            pointer-events: auto; /* Делаем кнопки кликабельными */
         }
 
         .ar-btn {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: none;
-            padding: 16px 10px;
-            border-radius: 16px;
-            font-size: 14px;
-            font-weight: 600;
-            color: #1d1d1f;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-            cursor: pointer;
+            flex: 1; padding: 16px 10px; border-radius: 16px; border: none;
+            background: var(--surface); color: var(--text);
+            font-size: 14px; font-weight: 600; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
 
-        .ar-btn.active { background: #0071e3; color: #fff; }
-        .ar-btn.exit { background: #ff3b30; color: white; }
+        .ar-btn.primary { background: var(--primary); color: #fff; }
+        .ar-btn.danger { background: rgba(255,59,48,0.9); color: #fff; }
 
-        #ar-lock-shield {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
+        /* Щит перехвата свайпов */
+        #touch-shield {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: -1;
         }
-        #ar-lock-shield.active { pointer-events: auto; }
+        #touch-shield.locked { pointer-events: auto; }
     </style>
 </head>
 <body>
 
-    <div class="app-container">
-        <div class="app-header">Примерка картины в интерьере</div>
+    <model-viewer 
+        id="viewer" 
+        src="https://cdn.jsdelivr.net/gh/danierukoruzunikanko-dev/3d-models@main/uploads_files_4943730_lisa.glb" 
+        ar ar-modes="webxr scene-viewer quick-look"
+        ar-scale="fixed" ar-placement="wall"
+        camera-controls disable-zoom shadow-intensity="1.2">
+        
+        <div slot="ar-ui" id="ar-ui-container">
+            <div id="touch-shield"></div>
+            
+            <div class="ar-toast" id="ar-toast">Наведите на стену</div>
 
-        <div class="preview-zone">
-            <div id="loading-overlay" class="loading-overlay">
-                <div class="spinner"></div>
-                <div id="loading-text">Загрузка 3D сцены...</div>
-            </div>
-
-            <model-viewer 
-                id="art-viewer" 
-                src="https://cdn.jsdelivr.net/gh/danierukoruzunikanko-dev/3d-models@main/uploads_files_4943730_lisa.glb" 
-                ar 
-                ar-modes="webxr scene-viewer quick-look"
-                ar-scale="fixed"
-                ar-placement="wall"
-                camera-controls
-                disable-zoom
-                shadow-intensity="1.5"
-                environment-image="neutral">
-                
-                <div slot="ar-ui" id="ar-ui-container">
-                    <div id="ar-lock-shield"></div>
-                    <div class="ar-top-bar">
-                        <div id="ar-prompt-text" class="ar-prompt">Наведите камеру на стену</div>
-                    </div>
-                    <div class="ar-bottom-bar">
-                        <button class="ar-btn" id="ar-recenter-btn">Центровка</button>
-                        <button class="ar-btn" id="ar-lock-btn">Блокировать</button>
-                        <button class="ar-btn exit" id="ar-exit-btn">Выйти</button>
-                    </div>
-                </div>
-            </model-viewer>
-        </div>
-
-        <div class="bottom-panel">
-            <div class="size-row">
-                <div class="input-field">
-                    <span class="prefix">Ширина:</span>
-                    <input type="number" id="cam-width" value="60">
-                    <span class="suffix">см</span>
-                </div>
-                <div class="input-field">
-                    <span class="prefix">Высота:</span>
-                    <input type="number" id="cam-height" value="80">
-                    <span class="suffix">см</span>
-                </div>
-            </div>
-
-            <div class="buttons-row">
-                <input type="file" id="image-upload" accept="image/*" style="display: none;">
-                <button class="btn btn-outline" onclick="document.getElementById('image-upload').click()">
-                    Своё фото
-                </button>
-                <button id="start-ar-btn" class="btn btn-filled">
-                    Примерить на стену
-                </button>
+            <div class="ar-controls">
+                <button class="ar-btn" id="btn-recenter">Переместить</button>
+                <button class="ar-btn primary" id="btn-lock">Закрепить</button>
+                <button class="ar-btn danger" id="btn-exit">X</button>
             </div>
         </div>
+    </model-viewer>
+
+    <div class="web-ui" id="web-ui">
+        <div class="controls-grid">
+            <div class="input-group">
+                <label>Ширина</label>
+                <div><input type="number" id="w-val" value="60"> см</div>
+            </div>
+            <div class="input-group">
+                <label>Высота</label>
+                <div><input type="number" id="h-val" value="80"> см</div>
+            </div>
+        </div>
+
+        <input type="file" id="img-upload" accept="image/*" style="display: none;">
+        
+        <button class="btn-main" id="btn-start-ar">Примерить в AR</button>
+        <button class="btn-sec" onclick="document.getElementById('img-upload').click()">Загрузить свою картину</button>
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const viewer = document.getElementById('art-viewer');
-            const loader = document.getElementById('loading-overlay');
-            const loadText = document.getElementById('loading-text');
-            const widthInput = document.getElementById('cam-width');
-            const heightInput = document.getElementById('cam-height');
-            const startArBtn = document.getElementById('start-ar-btn');
-            const lockBtn = document.getElementById('ar-lock-btn');
-            const lockShield = document.getElementById('ar-lock-shield');
-            const recenterBtn = document.getElementById('ar-recenter-btn');
-            const exitBtn = document.getElementById('ar-exit-btn');
-            const promptText = document.getElementById('ar-prompt-text');
+        const viewer = document.getElementById('viewer');
+        const wInput = document.getElementById('w-val');
+        const hInput = document.getElementById('h-val');
+        const toast = document.getElementById('ar-toast');
+        const touchShield = document.getElementById('touch-shield');
+        const btnLock = document.getElementById('btn-lock');
 
-            let isLocked = false;
+        let isLocked = false;
+        let imgAspectRatio = 60 / 80; // По умолчанию пропорции Моны Лизы
 
-            // Скрываем загрузочный экран при готовности 3D-модели
-            viewer.addEventListener('load', () => {
-                loader.classList.add('hidden');
-                applyScale();
-            });
+        // 1. Применение правильного масштаба (в метрах)
+        function updateScale() {
+            const w = parseFloat(wInput.value) || 60;
+            const h = parseFloat(hInput.value) || 80;
+            viewer.setAttribute('scale', `${w / 100} ${h / 100} 1`);
+        }
 
-            viewer.addEventListener('error', (err) => {
-                loadText.innerText = "Ошибка загрузки данных. Проверьте сеть.";
-                console.error(err);
-            });
+        wInput.addEventListener('input', () => {
+            // Если меняем ширину, авто-подгоняем высоту для сохранения пропорций
+            hInput.value = Math.round(wInput.value / imgAspectRatio);
+            updateScale();
+        });
+        
+        hInput.addEventListener('input', () => {
+            // Если меняем высоту, авто-подгоняем ширину
+            wInput.value = Math.round(hInput.value * imgAspectRatio);
+            updateScale();
+        });
 
-            // Расчет физических размеров на основе инпутов
-            function applyScale() {
-                const w = parseFloat(widthInput.value) || 60;
-                const h = parseFloat(heightInput.value) || 80;
-                viewer.setAttribute('scale', `${w / 100} ${h / 100} 1`);
-            }
+        // 2. Умная загрузка фото с расчетом пропорций
+        document.getElementById('img-upload').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-            widthInput.addEventListener('input', applyScale);
-            heightInput.addEventListener('input', applyScale);
+            const url = URL.createObjectURL(file);
+            
+            // Вычисляем пропорции изображения
+            const img = new Image();
+            img.src = url;
+            img.onload = async () => {
+                imgAspectRatio = img.width / img.height;
+                // Подгоняем высоту под текущую ширину
+                hInput.value = Math.round(wInput.value / imgAspectRatio);
+                updateScale();
 
-            // Динамическая замена картины на фото пользователя
-            document.getElementById('image-upload').addEventListener('change', async function(e) {
-                const file = e.target.files[0];
-                if (!file) return;
-                const imgUrl = URL.createObjectURL(file);
+                // Натягиваем текстуру на 3D модель
                 try {
-                    const texture = await viewer.createTexture(imgUrl);
-                    if (viewer.model && viewer.model.materials[0]) {
-                        const mat = viewer.model.materials[0];
-                        if (mat.pbrMetallicRoughness.baseColorTexture) {
-                            mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
-                        }
+                    const texture = await viewer.createTexture(url);
+                    if (viewer.model?.materials[0]?.pbrMetallicRoughness?.baseColorTexture) {
+                        viewer.model.materials[0].pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     }
-                } catch (err) {
-                    alert("Формат картинки не поддерживается холстом");
-                }
-            });
+                } catch(err) { console.error(err); }
+            };
+        });
 
-            // Безопасная инициализация AR-сессии
-            startArBtn.addEventListener('click', () => {
-                applyScale();
-                viewer.activateAR();
-            });
+        // 3. Запуск AR
+        document.getElementById('btn-start-ar').addEventListener('click', () => {
+            updateScale();
+            viewer.activateAR();
+        });
 
-            viewer.addEventListener('ar-status', (e) => {
-                if(e.detail.status === 'session-started') {
-                    promptText.innerText = "Плавно перемещайте телефон напротив стены";
-                }
-            });
+        // 4. Логика работы AR (Отлипание от стены и центровка)
+        viewer.addEventListener('ar-status', (e) => {
+            if(e.detail.status === 'session-started') {
+                document.getElementById('web-ui').classList.add('hidden');
+                toast.innerText = "Ищите ровную стену...";
+            }
+        });
 
-            // Функционал кнопок управления внутри дополненной реальности
-            lockBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isLocked = !isLocked;
-                if(isLocked) {
-                    lockBtn.innerText = "Разблокировать";
-                    lockBtn.classList.add('active');
-                    lockShield.classList.add('active');
-                } else {
-                    lockBtn.innerText = "Блокировать";
-                    lockBtn.classList.remove('active');
-                    lockShield.classList.remove('active');
-                }
-            });
+        // Фиксация на месте
+        btnLock.addEventListener('click', () => {
+            isLocked = !isLocked;
+            if (isLocked) {
+                touchShield.classList.add('locked');
+                btnLock.innerText = "Открепить";
+                btnLock.classList.remove('primary');
+                toast.innerText = "Картина зафиксирована";
+            } else {
+                touchShield.classList.remove('locked');
+                btnLock.innerText = "Закрепить";
+                btnLock.classList.add('primary');
+                toast.innerText = "Можно двигать пальцем";
+            }
+            setTimeout(() => toast.style.opacity = '0', 2000);
+            toast.style.opacity = '1';
+        });
 
-            recenterBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if(isLocked) lockBtn.click();
-                viewer.removeAttribute('ar-placement');
-                setTimeout(() => { viewer.setAttribute('ar-placement', 'wall'); }, 50);
-            });
+        // Принудительное "отлипание" от старой стены и поиск новой
+        document.getElementById('btn-recenter').addEventListener('click', () => {
+            if (isLocked) btnLock.click(); // Снимаем блокировку
+            
+            toast.style.opacity = '1';
+            toast.innerText = "Наведите центр экрана на новую стену";
+            
+            // МАГИЯ: Убираем привязку к стене и возвращаем ее через долю секунды.
+            // Это сбрасывает старый якорь, и прицел появляется по центру экрана телефона!
+            viewer.removeAttribute('ar-placement');
+            setTimeout(() => { 
+                viewer.setAttribute('ar-placement', 'wall'); 
+            }, 100);
+        });
 
-            exitBtn.addEventListener('click', () => {
-                window.location.reload();
-            });
+        // Выход
+        document.getElementById('btn-exit').addEventListener('click', () => {
+            window.location.reload();
         });
     </script>
 </body>
